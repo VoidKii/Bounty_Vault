@@ -1,7 +1,7 @@
 import os
 import asyncio
-import re
 import threading
+from datetime import datetime, timezone
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -31,9 +31,6 @@ if not TOKEN:
 ROLE_NAME = "Paid Joiner"
 MIN_ACCOUNT_MONTHS = 4
 
-# Falcon bot name
-FALCON_NAME = "falcon"
-
 
 # =========================
 # RENDER HEALTH SERVER
@@ -45,9 +42,14 @@ PORT = int(os.getenv("PORT", "10000"))
 class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
+        self.send_header(
+            "Content-Type",
+            "text/plain"
+        )
         self.end_headers()
+
         self.wfile.write(
             b"Bounty_Vault is online!"
         )
@@ -58,6 +60,7 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 
 def start_health_server():
+
     server = HTTPServer(
         ("0.0.0.0", PORT),
         HealthHandler
@@ -70,7 +73,7 @@ def start_health_server():
     server.serve_forever()
 
 
-# Start health server in background
+# Start health server
 health_thread = threading.Thread(
     target=start_health_server,
     daemon=True
@@ -113,9 +116,17 @@ async def on_ready():
         )
     )
 
-    print(f"✅ Logged in as {bot.user}")
-    print(f"🆔 Bot ID: {bot.user.id}")
-    print("🏴‍☠️ Bounty_Vault is ONLINE!")
+    print(
+        f"✅ Logged in as {bot.user}"
+    )
+
+    print(
+        f"🆔 Bot ID: {bot.user.id}"
+    )
+
+    print(
+        "🏴‍☠️ Bounty_Vault is ONLINE!"
+    )
 
 
 # =========================
@@ -131,129 +142,97 @@ async def ping(ctx):
 
 
 # ============================================================
-# ACCOUNT AGE CHECK
+# SEND FALCON-STYLE ACCOUNT AGE COMMAND
 # ============================================================
 
-async def check_account_age(channel, target):
+async def send_age_check(channel, target):
 
-    # Ask Falcon
-    await channel.send(
-        f"-accage {target.mention}"
-    )
+    # Send the command exactly like before.
+    # Bounty_Vault does NOT wait for or read Falcon's response.
 
-    print(
-        f"📡 Requested Falcon account age for {target}"
-    )
+    try:
 
-    # Wait for Falcon
-    await asyncio.sleep(6)
-
-    falcon_description = None
-
-    # Search recent messages
-    async for msg in channel.history(
-        limit=20
-    ):
-
-        # Must be a bot
-        if not msg.author.bot:
-            continue
-
-        # Must be Falcon
-        if FALCON_NAME not in msg.author.name.lower():
-            continue
-
-        # Must contain an embed
-        if not msg.embeds:
-            continue
-
-        embed = msg.embeds[0]
-
-        # Need title
-        if not embed.title:
-            continue
-
-        # Need Account Age in title
-        if "account age" not in embed.title.lower():
-            continue
-
-        target_name = target.name.lower()
-
-        title_text = embed.title.lower()
-
-        footer_text = ""
-
-        if embed.footer:
-            footer_text = (
-                embed.footer.text.lower()
-            )
-
-        # Make sure this is the target's result
-        if (
-            target_name not in title_text
-            and target_name not in footer_text
-        ):
-            continue
-
-        falcon_description = (
-            embed.description
+        await channel.send(
+            f"-accage {target.mention}"
         )
 
-        break
+        print(
+            f"🦅 Sent Falcon-style age check for {target}"
+        )
 
-    # Falcon didn't respond
-    if not falcon_description:
+    except discord.Forbidden:
 
-        return None, None
+        print(
+            "❌ Could not send account-age command."
+        )
+
+    except discord.HTTPException:
+
+        print(
+            "❌ Discord rejected the account-age message."
+        )
+
+
+# ============================================================
+# CALCULATE DISCORD ACCOUNT AGE
+# ============================================================
+
+def calculate_account_age(user):
+
+    created_at = user.created_at
+
+    now = datetime.now(timezone.utc)
+
+    # Calculate total days
+    total_days = (
+        now - created_at
+    ).days
+
+    # Approximate months
+    total_months = total_days // 30
+
+    years = total_months // 12
+    months = total_months % 12
+
+    remaining_days = (
+        total_days
+        - (total_months * 30)
+    )
 
     # =========================
-    # PARSE AGE
+    # FORMAT AGE
     # =========================
 
-    text = falcon_description.lower()
+    parts = []
 
-    years_match = re.search(
-        r"(\d+)\s*year",
-        text
-    )
+    if years > 0:
 
-    months_match = re.search(
-        r"(\d+)\s*month",
-        text
-    )
+        parts.append(
+            f"{years} year"
+            + ("s" if years != 1 else "")
+        )
 
-    days_match = re.search(
-        r"(\d+)\s*day",
-        text
-    )
+    if months > 0:
 
-    years = (
-        int(years_match.group(1))
-        if years_match
-        else 0
-    )
+        parts.append(
+            f"{months} month"
+            + ("s" if months != 1 else "")
+        )
 
-    months = (
-        int(months_match.group(1))
-        if months_match
-        else 0
-    )
+    if remaining_days > 0:
 
-    days = (
-        int(days_match.group(1))
-        if days_match
-        else 0
-    )
+        parts.append(
+            f"{remaining_days} day"
+            + ("s" if remaining_days != 1 else "")
+        )
 
-    total_months = (
-        years * 12
-        + months
-    )
+    if not parts:
 
-    return (
-        falcon_description,
-        total_months
-    )
+        parts.append("Less than 1 month")
+
+    age_text = ", ".join(parts)
+
+    return age_text, total_months
 
 
 # ============================================================
@@ -340,76 +319,113 @@ async def run_verification(
     if guild is None:
 
         await interaction.followup.send(
-            "❌ Verification can only be used inside a server.",
+            "❌ **Verification Unavailable**\n\n"
+            "This system can only be used inside a server.",
             ephemeral=True
         )
 
         return
 
+
     # =========================
-    # PROFILE PICTURE
+    # PROFILE PICTURE CHECK
     # =========================
 
     if target.avatar is None:
 
         await interaction.followup.send(
-            "❌ **Verification Failed**\n\n"
-            "🖼️ You need to have a profile picture "
-            "set before you can pass verification.",
+            "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+            "   🦅 **FALCON • VERIFICATION**\n"
+            "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
+
+            "👤 **Identity:** "
+            f"`{target.name}`\n"
+            "🖼️ **Profile:** ❌ Not detected\n\n"
+
+            "🚫 **VERIFICATION DENIED**\n"
+            "A profile picture is required "
+            "to continue.",
             ephemeral=True
         )
 
         return
 
-    # Tell user we're checking
+
+    # =========================
+    # START MESSAGE
+    # =========================
+
     await interaction.followup.send(
-        "🔍 **Verification started!**\n\n"
-        "🖼️ Profile picture: ✅\n"
-        "📅 Checking account age with Falcon...\n\n"
-        "⏳ Please wait...",
+        "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+        "   🦅 **FALCON • VERIFICATION**\n"
+        "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
+
+        f"👤 **User:** `{target.name}`\n\n"
+
+        "🔎 **Running security checks...**\n"
+        "🖼️ Profile integrity ........ `✓`\n"
+        "📡 Account intelligence ...... `ACTIVE`\n"
+        "🛡️ Eligibility scan .......... `RUNNING`\n\n"
+
+        "⏳ **Analyzing account data...**",
         ephemeral=True
     )
 
+
     # =========================
-    # ACCOUNT AGE
+    # SEND FALCON COMMAND
     # =========================
 
-    description, total_months = (
-        await check_account_age(
-            interaction.channel,
-            target
-        )
+    await send_age_check(
+        interaction.channel,
+        target
     )
 
-    # Falcon failed
-    if description is None:
 
-        await interaction.followup.send(
-            "❌ **Verification Failed**\n\n"
-            "I couldn't read Falcon's account-age response.\n\n"
-            "Please try again in a few seconds.",
-            ephemeral=True
-        )
+    # Small delay so the public command
+    # has time to appear in the channel.
+    await asyncio.sleep(1)
 
-        return
 
     # =========================
-    # ACCOUNT TOO YOUNG
+    # CALCULATE ACCOUNT AGE
+    # =========================
+
+    age_text, total_months = (
+        calculate_account_age(target)
+    )
+
+
+    # =========================
+    # TOO YOUNG
     # =========================
 
     if total_months < MIN_ACCOUNT_MONTHS:
 
         await interaction.followup.send(
-            "❌ **Not Eligible**\n\n"
-            f"👤 User: {target.mention}\n"
-            "🖼️ Profile Picture: ✅\n"
-            f"📅 Account Age: **{description}**\n\n"
-            f"🚫 Your account must be at least "
-            f"**{MIN_ACCOUNT_MONTHS} months old**.",
+            "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+            "   🦅 **FALCON • SCAN COMPLETE**\n"
+            "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
+
+            f"👤 **Account:** `{target.name}`\n"
+            "🖼️ **Profile:** `VERIFIED` ✓\n"
+            f"📆 **Account Age:** `{age_text}`\n"
+            "🛡️ **Eligibility:** `DENIED` ✕\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━\n"
+
+            "🚫 **NOT ELIGIBLE**\n\n"
+
+            f"Your account must be at least "
+            f"**{MIN_ACCOUNT_MONTHS} months old**.\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "🏴‍☠️ `Bounty_Vault • Security Division`",
             ephemeral=True
         )
 
         return
+
 
     # =========================
     # GIVE ROLE
@@ -422,51 +438,94 @@ async def run_verification(
         )
     )
 
+
     if not success:
 
         await interaction.followup.send(
-            "⚠️ **Verification Passed, "
-            "but I couldn't give the role.**\n\n"
+            "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+            "   🦅 **FALCON • SCAN COMPLETE**\n"
+            "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
+
+            f"👤 **Account:** `{target.name}`\n"
+            "🖼️ **Profile:** `VERIFIED` ✓\n"
+            f"📆 **Account Age:** `{age_text}`\n"
+            "🛡️ **Eligibility:** `CLEARED` ✓\n\n"
+
+            "⚠️ **ROLE ASSIGNMENT FAILED**\n\n"
+
             f"{role_message}",
             ephemeral=True
         )
 
         return
 
+
     # =========================
     # SUCCESS
     # =========================
 
     embed = discord.Embed(
-        title="✅ Eligibility Verified!",
+
+        title="🦅 FALCON • VERIFICATION COMPLETE",
+
         description=(
-            f"Congratulations {target.mention}! 🎉\n\n"
-            "You passed all required checks."
+            f"**Welcome to the vault, "
+            f"{target.mention}!** 🏴‍☠️\n\n"
+
+            "Your account has successfully "
+            "passed the eligibility scan."
         ),
+
         color=discord.Color.green()
     )
 
+
     embed.add_field(
-        name="🖼️ Profile Picture",
-        value="✅ Yes",
+        name="👤 Account",
+        value=f"`{target.name}`",
         inline=True
     )
 
+
     embed.add_field(
-        name="📅 Account Age",
-        value=description,
+        name="🖼️ Profile",
+        value="`VERIFIED` ✓",
         inline=True
     )
 
+
     embed.add_field(
-        name="🎟️ Role",
-        value=f"**{ROLE_NAME}**",
+        name="📆 Account Age",
+        value=f"`{age_text}`",
         inline=True
     )
+
+
+    embed.add_field(
+        name="🛡️ Eligibility",
+        value="`CLEARED` ✓",
+        inline=True
+    )
+
+
+    embed.add_field(
+        name="🎟️ Access",
+        value=f"`{ROLE_NAME}` ✓",
+        inline=True
+    )
+
+
+    embed.add_field(
+        name="🔐 Status",
+        value="`APPROVED`",
+        inline=True
+    )
+
 
     embed.set_footer(
-        text="🏴‍☠️ Bounty_Vault Verification"
+        text="🏴‍☠️ Bounty_Vault • Security Division"
     )
+
 
     await interaction.followup.send(
         embed=embed,
@@ -478,7 +537,9 @@ async def run_verification(
 # VERIFY BUTTON
 # ============================================================
 
-class VerifyView(discord.ui.View):
+class VerifyView(
+    discord.ui.View
+):
 
     def __init__(self):
 
@@ -486,19 +547,21 @@ class VerifyView(discord.ui.View):
             timeout=None
         )
 
+
     @discord.ui.button(
         label="Verify Eligibility",
         style=discord.ButtonStyle.green,
         emoji="🔎",
         custom_id="bounty_vault_verify"
     )
+
     async def verify_button(
         self,
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
 
-        # Make the interaction acknowledged
+        # Acknowledge button
         await interaction.response.defer(
             ephemeral=True
         )
@@ -519,13 +582,15 @@ class VerifyView(discord.ui.View):
             try:
 
                 await interaction.followup.send(
-                    "❌ Something went wrong "
-                    "during verification.\n\n"
+                    "❌ **Verification Error**\n\n"
+                    "Something went wrong while "
+                    "processing your verification.\n\n"
                     "Please try again.",
                     ephemeral=True
                 )
 
             except discord.HTTPException:
+
                 pass
 
 
@@ -537,28 +602,39 @@ class VerifyView(discord.ui.View):
     name="verify",
     description="Check your Bounty_Vault eligibility."
 )
+
 async def verify(
     interaction: discord.Interaction
 ):
 
     embed = discord.Embed(
-        title="🏴‍☠️ Bounty_Vault Verification",
+
+        title="🏴‍☠️ Bounty_Vault • Eligibility",
+
         description=(
-            "Click the button below to check "
-            "your eligibility.\n\n"
-            "🔎 **Checks:**\n"
-            "• Profile picture\n"
-            "• Account age\n"
-            "• Eligibility status\n"
-            "• Paid Joiner role\n\n"
-            "✨ Verification is automatic."
+            "### 🦅 Falcon Intelligence System\n\n"
+
+            "Press **Verify Eligibility** below "
+            "to begin your automated account scan.\n\n"
+
+            "🔎 **Security Checks**\n"
+            "・🖼️ Profile verification\n"
+            "・📆 Account age analysis\n"
+            "・🛡️ Eligibility assessment\n"
+            "・🎟️ Paid Joiner access\n\n"
+
+            "⚡ **Automatic verification**\n"
+            "Fast. Simple. Secure."
         ),
+
         color=discord.Color.gold()
     )
 
+
     embed.set_footer(
-        text="Bounty_Vault • Eligibility System"
+        text="Bounty_Vault • Security Division"
     )
+
 
     await interaction.response.send_message(
         embed=embed,
@@ -573,7 +649,9 @@ async def verify(
 @bot.command(
     name="checkeligible"
 )
+
 @commands.guild_only()
+
 async def check_eligible(
     ctx,
     member: discord.Member = None
@@ -581,7 +659,11 @@ async def check_eligible(
 
     target = member or ctx.author
 
-    # Profile picture
+
+    # =========================
+    # PROFILE PICTURE
+    # =========================
+
     if target.avatar is None:
 
         await ctx.send(
@@ -591,35 +673,53 @@ async def check_eligible(
 
         return
 
+
     await ctx.send(
-        f"🔍 Checking {target.mention}..."
+        f"🔎 Checking `{target.name}`..."
     )
 
-    description, total_months = (
-        await check_account_age(
-            ctx.channel,
-            target
-        )
+
+    # Send Falcon-style command
+    await send_age_check(
+        ctx.channel,
+        target
     )
 
-    if description is None:
 
-        await ctx.send(
-            "❌ Could not read Falcon's response. "
-            "Please try again."
-        )
+    await asyncio.sleep(1)
 
-        return
+
+    # Calculate age ourselves
+    age_text, total_months = (
+        calculate_account_age(target)
+    )
+
+
+    # =========================
+    # TOO YOUNG
+    # =========================
 
     if total_months < MIN_ACCOUNT_MONTHS:
 
         await ctx.send(
-            f"❌ {target.mention}'s account is "
-            f"under {MIN_ACCOUNT_MONTHS} months old.\n"
-            f"Found: **{description}**"
+            "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+            "   🦅 **FALCON • SCAN COMPLETE**\n"
+            "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
+
+            f"👤 **Account:** `{target.name}`\n"
+            f"📆 **Account Age:** `{age_text}`\n"
+            "🛡️ **Eligibility:** `DENIED` ✕\n\n"
+
+            f"🚫 Account must be at least "
+            f"**{MIN_ACCOUNT_MONTHS} months old**."
         )
 
         return
+
+
+    # =========================
+    # GIVE ROLE
+    # =========================
 
     success, role_message = (
         await give_paid_joiner_role(
@@ -627,6 +727,7 @@ async def check_eligible(
             target
         )
     )
+
 
     if not success:
 
@@ -636,12 +737,23 @@ async def check_eligible(
 
         return
 
+
+    # =========================
+    # SUCCESS
+    # =========================
+
     await ctx.send(
-        f"✅ **Eligibility Verified!**\n\n"
-        f"👤 User: {target.mention}\n"
-        f"🖼️ Profile Picture: Yes\n"
-        f"📅 Account Age: {description}\n"
-        f"🎟️ {role_message}"
+        "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+        "   🦅 **FALCON • VERIFIED**\n"
+        "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
+
+        f"👤 **Account:** `{target.name}`\n"
+        "🖼️ **Profile:** `VERIFIED` ✓\n"
+        f"📆 **Account Age:** `{age_text}`\n"
+        "🛡️ **Eligibility:** `CLEARED` ✓\n"
+        f"🎟️ **Access:** `{ROLE_NAME}` ✓\n\n"
+
+        "🏴‍☠️ **ACCESS GRANTED**"
     )
 
 
@@ -659,7 +771,9 @@ async def on_command_error(
         error,
         commands.CommandNotFound
     ):
+
         return
+
 
     if isinstance(
         error,
@@ -673,9 +787,11 @@ async def on_command_error(
 
         return
 
+
     print(
         f"❌ Command error: {repr(error)}"
     )
+
 
     await ctx.send(
         f"❌ An error occurred:\n"
@@ -695,8 +811,10 @@ async def setup_hook():
         VerifyView()
     )
 
+
     # Sync slash commands
     synced = await bot.tree.sync()
+
 
     print(
         f"🔄 Synced {len(synced)} slash command(s)"
