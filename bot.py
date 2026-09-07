@@ -1,6 +1,9 @@
 import os
 import asyncio
 import re
+import threading
+
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import discord
 from discord.ext import commands
@@ -30,6 +33,50 @@ MIN_ACCOUNT_MONTHS = 4
 
 # Falcon bot name
 FALCON_NAME = "falcon"
+
+
+# =========================
+# RENDER HEALTH SERVER
+# =========================
+
+PORT = int(os.getenv("PORT", "10000"))
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(
+            b"Bounty_Vault is online!"
+        )
+
+    def log_message(self, format, *args):
+        # Keep Render logs clean
+        return
+
+
+def start_health_server():
+    server = HTTPServer(
+        ("0.0.0.0", PORT),
+        HealthHandler
+    )
+
+    print(
+        f"🌐 Health server listening on port {PORT}"
+    )
+
+    server.serve_forever()
+
+
+# Start health server in background
+health_thread = threading.Thread(
+    target=start_health_server,
+    daemon=True
+)
+
+health_thread.start()
 
 
 # =========================
@@ -87,10 +134,10 @@ async def ping(ctx):
 # ACCOUNT AGE CHECK
 # ============================================================
 
-async def check_account_age(ctx, target):
+async def check_account_age(channel, target):
 
     # Ask Falcon
-    await ctx.send(
+    await channel.send(
         f"-accage {target.mention}"
     )
 
@@ -104,7 +151,7 @@ async def check_account_age(ctx, target):
     falcon_description = None
 
     # Search recent messages
-    async for msg in ctx.channel.history(
+    async for msg in channel.history(
         limit=20
     ):
 
@@ -329,7 +376,6 @@ async def run_verification(
 
     description, total_months = (
         await check_account_age(
-            # We need a channel for Falcon
             interaction.channel,
             target
         )
@@ -551,7 +597,7 @@ async def check_eligible(
 
     description, total_months = (
         await check_account_age(
-            ctx,
+            ctx.channel,
             target
         )
     )
