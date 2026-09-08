@@ -1,5 +1,4 @@
 import os
-import asyncio
 import threading
 from datetime import datetime, timezone
 
@@ -139,38 +138,6 @@ async def ping(ctx):
     await ctx.send(
         "🏴‍☠️ **Bounty_Vault is ONLINE!** 🟢"
     )
-
-
-# ============================================================
-# SEND FALCON-STYLE ACCOUNT AGE COMMAND
-# ============================================================
-
-async def send_age_check(channel, target):
-
-    # Send the command exactly like before.
-    # Bounty_Vault does NOT wait for or read Falcon's response.
-
-    try:
-
-        await channel.send(
-            f"-accage {target.mention}"
-        )
-
-        print(
-            f"🦅 Sent Falcon-style age check for {target}"
-        )
-
-    except discord.Forbidden:
-
-        print(
-            "❌ Could not send account-age command."
-        )
-
-    except discord.HTTPException:
-
-        print(
-            "❌ Discord rejected the account-age message."
-        )
 
 
 # ============================================================
@@ -370,21 +337,6 @@ async def run_verification(
         "⏳ **Analyzing account data...**",
         ephemeral=True
     )
-
-
-    # =========================
-    # SEND FALCON COMMAND
-    # =========================
-
-    await send_age_check(
-        interaction.channel,
-        target
-    )
-
-
-    # Small delay so the public command
-    # has time to appear in the channel.
-    await asyncio.sleep(1)
 
 
     # =========================
@@ -679,17 +631,10 @@ async def check_eligible(
     )
 
 
-    # Send Falcon-style command
-    await send_age_check(
-        ctx.channel,
-        target
-    )
+    # =========================
+    # CALCULATE AGE
+    # =========================
 
-
-    await asyncio.sleep(1)
-
-
-    # Calculate age ourselves
     age_text, total_months = (
         calculate_account_age(target)
     )
