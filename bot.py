@@ -42,15 +42,63 @@ class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
 
-        self.send_response(200)
+        # =========================
+        # /health
+        # =========================
+
+        if self.path == "/health":
+
+            self.send_response(200)
+
+            self.send_header(
+                "Content-Type",
+                "text/plain; charset=utf-8"
+            )
+
+            self.end_headers()
+
+            self.wfile.write(
+                b"Bounty_Vault is online! Health check: OK"
+            )
+
+            return
+
+        # =========================
+        # /
+        # =========================
+
+        if self.path == "/":
+
+            self.send_response(200)
+
+            self.send_header(
+                "Content-Type",
+                "text/plain; charset=utf-8"
+            )
+
+            self.end_headers()
+
+            self.wfile.write(
+                b"Bounty_Vault is online!"
+            )
+
+            return
+
+        # =========================
+        # 404
+        # =========================
+
+        self.send_response(404)
+
         self.send_header(
             "Content-Type",
-            "text/plain"
+            "text/plain; charset=utf-8"
         )
+
         self.end_headers()
 
         self.wfile.write(
-            b"Bounty_Vault is online!"
+            b"404 Not Found"
         )
 
     def log_message(self, format, *args):
@@ -72,7 +120,10 @@ def start_health_server():
     server.serve_forever()
 
 
-# Start health server
+# =========================
+# START HEALTH SERVER
+# =========================
+
 health_thread = threading.Thread(
     target=start_health_server,
     daemon=True
@@ -150,12 +201,10 @@ def calculate_account_age(user):
 
     now = datetime.now(timezone.utc)
 
-    # Calculate total days
     total_days = (
         now - created_at
     ).days
 
-    # Approximate months
     total_months = total_days // 30
 
     years = total_months // 12
@@ -165,10 +214,6 @@ def calculate_account_age(user):
         total_days
         - (total_months * 30)
     )
-
-    # =========================
-    # FORMAT AGE
-    # =========================
 
     parts = []
 
@@ -216,7 +261,6 @@ async def give_paid_joiner_role(
         name=ROLE_NAME
     )
 
-    # Role doesn't exist
     if role is None:
 
         return False, (
@@ -224,7 +268,6 @@ async def give_paid_joiner_role(
             f"does not exist."
         )
 
-    # Already has role
     if role in target.roles:
 
         return True, (
@@ -232,7 +275,6 @@ async def give_paid_joiner_role(
             f"the **{ROLE_NAME}** role."
         )
 
-    # Check bot hierarchy
     if role >= guild.me.top_role:
 
         return False, (
@@ -241,7 +283,6 @@ async def give_paid_joiner_role(
             f"`{ROLE_NAME}` in Server Settings → Roles."
         )
 
-    # Give role
     try:
 
         await target.add_roles(
@@ -293,7 +334,6 @@ async def run_verification(
 
         return
 
-
     # =========================
     # PROFILE PICTURE CHECK
     # =========================
@@ -317,7 +357,6 @@ async def run_verification(
 
         return
 
-
     # =========================
     # START MESSAGE
     # =========================
@@ -338,7 +377,6 @@ async def run_verification(
         ephemeral=True
     )
 
-
     # =========================
     # CALCULATE ACCOUNT AGE
     # =========================
@@ -346,7 +384,6 @@ async def run_verification(
     age_text, total_months = (
         calculate_account_age(target)
     )
-
 
     # =========================
     # TOO YOUNG
@@ -378,7 +415,6 @@ async def run_verification(
 
         return
 
-
     # =========================
     # GIVE ROLE
     # =========================
@@ -389,7 +425,6 @@ async def run_verification(
             target
         )
     )
-
 
     if not success:
 
@@ -411,7 +446,6 @@ async def run_verification(
 
         return
 
-
     # =========================
     # SUCCESS
     # =========================
@@ -431,13 +465,11 @@ async def run_verification(
         color=discord.Color.green()
     )
 
-
     embed.add_field(
         name="👤 Account",
         value=f"`{target.name}`",
         inline=True
     )
-
 
     embed.add_field(
         name="🖼️ Profile",
@@ -445,13 +477,11 @@ async def run_verification(
         inline=True
     )
 
-
     embed.add_field(
         name="📆 Account Age",
         value=f"`{age_text}`",
         inline=True
     )
-
 
     embed.add_field(
         name="🛡️ Eligibility",
@@ -459,13 +489,11 @@ async def run_verification(
         inline=True
     )
 
-
     embed.add_field(
         name="🎟️ Access",
         value=f"`{ROLE_NAME}` ✓",
         inline=True
     )
-
 
     embed.add_field(
         name="🔐 Status",
@@ -473,11 +501,9 @@ async def run_verification(
         inline=True
     )
 
-
     embed.set_footer(
         text="🏴‍☠️ Bounty_Vault • Security Division"
     )
-
 
     await interaction.followup.send(
         embed=embed,
@@ -499,7 +525,6 @@ class VerifyView(
             timeout=None
         )
 
-
     @discord.ui.button(
         label="Verify Eligibility",
         style=discord.ButtonStyle.green,
@@ -513,7 +538,6 @@ class VerifyView(
         button: discord.ui.Button
     ):
 
-        # Acknowledge button
         await interaction.response.defer(
             ephemeral=True
         )
@@ -582,11 +606,9 @@ async def verify(
         color=discord.Color.gold()
     )
 
-
     embed.set_footer(
         text="Bounty_Vault • Security Division"
     )
-
 
     await interaction.response.send_message(
         embed=embed,
@@ -611,7 +633,6 @@ async def check_eligible(
 
     target = member or ctx.author
 
-
     # =========================
     # PROFILE PICTURE
     # =========================
@@ -625,11 +646,9 @@ async def check_eligible(
 
         return
 
-
     await ctx.send(
         f"🔎 Checking `{target.name}`..."
     )
-
 
     # =========================
     # CALCULATE AGE
@@ -638,7 +657,6 @@ async def check_eligible(
     age_text, total_months = (
         calculate_account_age(target)
     )
-
 
     # =========================
     # TOO YOUNG
@@ -661,7 +679,6 @@ async def check_eligible(
 
         return
 
-
     # =========================
     # GIVE ROLE
     # =========================
@@ -673,7 +690,6 @@ async def check_eligible(
         )
     )
 
-
     if not success:
 
         await ctx.send(
@@ -681,7 +697,6 @@ async def check_eligible(
         )
 
         return
-
 
     # =========================
     # SUCCESS
@@ -719,7 +734,6 @@ async def on_command_error(
 
         return
 
-
     if isinstance(
         error,
         commands.MissingPermissions
@@ -732,11 +746,9 @@ async def on_command_error(
 
         return
 
-
     print(
         f"❌ Command error: {repr(error)}"
     )
-
 
     await ctx.send(
         f"❌ An error occurred:\n"
@@ -756,10 +768,8 @@ async def setup_hook():
         VerifyView()
     )
 
-
     # Sync slash commands
     synced = await bot.tree.sync()
-
 
     print(
         f"🔄 Synced {len(synced)} slash command(s)"
